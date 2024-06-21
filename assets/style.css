@@ -1,10 +1,15 @@
-.message-bubble {
+.message-bubble-user {
+    padding: 10px;
+    border-radius: 15px;
+    background-color: #d9e8f5;
+    margin-bottom: 5px;
+    max-width: 60%;
+}
+.message-bubble-bot {
     padding: 10px;
     border-radius: 15px;
     background-color: #e0e0e0;
     margin-bottom: 5px;
-    max-width: 60%;
-}
-.user-message {
-    background-color: #d9e8f5; /* Light blue background */
+    max-width: 80%;
+    margin-left: auto;
 }

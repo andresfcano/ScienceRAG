@@ -1,10 +1,8 @@
 # Import necessary libraries
-from flask import Flask, stream_with_context, Response
 import dash
 from dash import html, dcc, Output, Input, State
 import dash_bootstrap_components as dbc
 import ollama
-import json
 
 
 # Initialize the app
@@ -16,7 +14,7 @@ app.layout = html.Div([
     html.Div([
         html.Div(id='chat-output', style={
             'width': '100%',
-            'height': '300px',
+            'height': '600px',
             'border': '1px solid #d3d3d3',
             'borderRadius': '5px',
             'padding': '10px',
@@ -42,44 +40,62 @@ app.layout = html.Div([
                 'color': '#ffffff'
             })
         ], style={'width': '100%', 'display': 'flex'})
-    ], style={'width': '80%', 'margin': 'auto'})
+    ], style={'width': '80%', 'margin': 'auto'}),
+    dcc.Store(id='store-input-value')  # Store to hold the input value temporarily
 ])
 
-# Define your SSE endpoint
-@app.server.route('/stream')
-def stream_responses():
-    def generate():
-        # Initialize Ollama chat stream with placeholder messages
-        stream = ollama.chat(
-            model='llama3',
-            messages=[{'role': 'user', 'content': 'Placeholder message'}],
-            stream=True,
-        )
-        
-        # Yield each message as an SSE
-        for chunk in stream:
-            yield f"data: {json.dumps(chunk['message']['content'])}\n\n"
-    
-    return Response(stream_with_context(generate()), mimetype='text/event-stream')
+# Function to interact with ollama API
+def get_response_from_ollama(user_input):
+    try:
+        response = ollama.generate(model='llama3', prompt=user_input)
+        response_text = response['response']
+        return response_text
+    except Exception as e:
+        return f"Error: {str(e)}"
 
-# Callback to update chat output
+# Callback to display user message immediately and store the input value
 @app.callback(
-    [Output('chat-output', 'children'),
-     Output('chat-input', 'value')],
+    [Output('chat-output', 'children', allow_duplicate=True),
+     Output('chat-input', 'value'),
+     Output('store-input-value', 'data')],
     [Input('send-button', 'n_clicks'),
      Input('chat-input', 'n_submit')],
     [State('chat-input', 'value'),
-     State('chat-output', 'children')]
+     State('chat-output', 'children')],
+    prevent_initial_call=True
 )
-def update_output(n_clicks, n_submit, input_value, current_output):
+def update_user_message(n_clicks, n_submit, input_value, current_output):
     if n_clicks > 0 or n_submit:
-        new_message = html.Div([html.B("User: "), f"{input_value}"], className="message-bubble user-message")
-        if current_output:
-            current_output.append(new_message)
-        else:
-            current_output = [new_message]
-        return current_output, ''
-    return current_output, input_value
+        if not input_value:
+            return current_output, '', None
+
+        # Add user's message to the chat output
+        new_message_user = html.Div([html.B("User: "), f"{input_value}"], className="message-bubble-user")
+        if current_output is None:
+            current_output = []
+        current_output.append(new_message_user)
+
+        # Store the input value for the bot response
+        return current_output, '', input_value
+
+    return current_output, input_value, None
+
+# Callback to get bot response and update chat output
+@app.callback(
+    Output('chat-output', 'children'),
+    [Input('store-input-value', 'data')],
+    [State('chat-output', 'children')]
+)
+def update_bot_response(stored_input, current_output):
+    if stored_input:
+        # Get response from ollama API
+        ollama_response = get_response_from_ollama(stored_input)
+
+        # Add ollama's response to the chat output
+        new_message_bot = html.Div([html.B("LLM: "), f"{ollama_response}"], className="message-bubble-bot")
+        current_output.append(new_message_bot)
+
+    return current_output
 
 # Run the app
 if __name__ == '__main__':
