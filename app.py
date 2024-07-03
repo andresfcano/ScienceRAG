@@ -3,6 +3,9 @@ import dash
 from dash import html, dcc, Output, Input, State
 import dash_bootstrap_components as dbc
 import ollama
+# Libraries for Document handling
+import chromadb
+from pypdf import PdfReader
 
 
 # Initialize the app
@@ -44,12 +47,56 @@ app.layout = html.Div([
     dcc.Store(id='store-input-value')  # Store to hold the input value temporarily
 ])
 
+# Build ChromaDB vector store
+def build_vector_store(path_to_pdfs):
+    # Extract text from PDFs
+    reader = PdfReader(path_to_pdfs)
+
+    client = chromadb.Client()
+    try:
+        collection = client.create_collection(name="docs")
+    except:
+        collection = client.get_collection(name="docs")
+
+    # Store each page
+    for i, page in enumerate(reader.pages):
+        response = ollama.embeddings(model="mxbai-embed-large", prompt=page.extract_text())
+        embedding = response["embedding"]
+        collection.add(
+            ids=[str(i)],
+            embeddings=[embedding],
+            documents=[page.extract_text()]
+        )
+
 # Function to interact with ollama API
 def get_response_from_ollama(user_input):
     try:
+        # an example prompt
+        prompt = "What are some drawbacks of the combustion of diesel fuels?"
+
+        # generate an embedding for the prompt and retrieve the most relevant doc
+        response = ollama.embeddings(
+            prompt=prompt,
+            model="mxbai-embed-large"
+        )
+        results = collection.query(
+            query_embeddings=[response["embedding"]],
+            n_results=5
+        )
+        data = results['documents'][0][0]
+
+        # generate a response combining the prompt and data we retrieved in step 2
+        output = ollama.generate(
+            model="llama3",
+            prompt=f"Using this data: {data}. Respond to this prompt: {prompt}"
+        )
+
+        print(output['response'])
+
         response = ollama.generate(model='llama3', prompt=user_input)
         response_text = response['response']
         return response_text
+    
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -99,4 +146,6 @@ def update_bot_response(stored_input, current_output):
 
 # Run the app
 if __name__ == '__main__':
+    PATH_TO_PDFS = r"C:\Users\Andres\Desktop\ScienceRAG\papers\Bartholet_et_al.pdf"
+    build_vector_store(PATH_TO_PDFS)
     app.run_server(debug=True)
