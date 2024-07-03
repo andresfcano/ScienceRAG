@@ -57,6 +57,8 @@ def build_vector_store(path_to_pdfs):
         collection = client.create_collection(name="docs")
     except:
         collection = client.get_collection(name="docs")
+        client.delete_collection(name="docs")
+        collection = client.create_collection(name="docs")
 
     # Store each page
     for i, page in enumerate(reader.pages):
@@ -71,12 +73,11 @@ def build_vector_store(path_to_pdfs):
 # Function to interact with ollama API
 def get_response_from_ollama(user_input):
     try:
-        # an example prompt
-        prompt = "What are some drawbacks of the combustion of diesel fuels?"
-
+        client = chromadb.Client()
+        collection = client.get_collection(name="docs")
         # generate an embedding for the prompt and retrieve the most relevant doc
         response = ollama.embeddings(
-            prompt=prompt,
+            prompt=user_input,
             model="mxbai-embed-large"
         )
         results = collection.query(
@@ -84,19 +85,14 @@ def get_response_from_ollama(user_input):
             n_results=5
         )
         data = results['documents'][0][0]
-
         # generate a response combining the prompt and data we retrieved in step 2
         output = ollama.generate(
             model="llama3",
-            prompt=f"Using this data: {data}. Respond to this prompt: {prompt}"
+            prompt=f"Using this data: {data}. Respond to this prompt: {user_input}"
         )
+        response_text = output['response']
 
-        print(output['response'])
-
-        response = ollama.generate(model='llama3', prompt=user_input)
-        response_text = response['response']
         return response_text
-    
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -146,6 +142,6 @@ def update_bot_response(stored_input, current_output):
 
 # Run the app
 if __name__ == '__main__':
-    PATH_TO_PDFS = r"C:\Users\Andres\Desktop\ScienceRAG\papers\Bartholet_et_al.pdf"
+    PATH_TO_PDFS = r"C:\Users\Andres\Desktop\ScienceRAG\papers\Westgate_et_al.pdf"
     build_vector_store(PATH_TO_PDFS)
     app.run_server(debug=True)
